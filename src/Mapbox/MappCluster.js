@@ -14,7 +14,7 @@ class MappCluster extends PureComponent {
 
     this.state = {
       minZoom: 0,
-      maxZoom: 16, //20
+      maxZoom: 14, //20
       radius: 20,
       extent: 516 + 516,
       nodeSize: 10,

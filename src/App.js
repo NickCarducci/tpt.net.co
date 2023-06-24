@@ -1516,7 +1516,7 @@ class App extends React.Component {
             const url = `https://app.ticketmaster.com/discovery/v2/events.json?geoPoint=${Geohash.encode(
               ...latlng,
               [9]
-            )}&size=10&apikey=${consumerSecret}`;
+            )}&size=150&apikey=${consumerSecret}`;
             await fetch(url)
               .then(async (response) => await response.json())
               .then((body) => {
@@ -2524,6 +2524,7 @@ class App extends React.Component {
           {this.state.event
             .filter((x) => x.subtype.includes(this.state.subtype))
             .map((x, i) => {
+              if (i !== 0) return null;
               return (
                 <div
                   key={i}
