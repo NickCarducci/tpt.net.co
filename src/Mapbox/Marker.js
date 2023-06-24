@@ -62,9 +62,10 @@ class Marker extends BaseControl {
       ? "/events/ticketmaster/" + event.id
       : !event.venue
       ? "/events/edmtrain/" + event.id
-      : sameaddress
+      : /*sameaddress
       ? "/events/" + event.place_name
-      : "/event/" + event.id;
+      : */ "/event/" +
+        event.id;
     //console.log(to, String(event.id).length > 10, event.id, photo1);
     return (
       //ref={this._containerRef}
