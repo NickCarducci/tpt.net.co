@@ -2572,7 +2572,8 @@ class App extends React.Component {
           >
             <div
               onClick={() => {
-                this.props.navigate(-1);
+                this.props.navigate("/");
+                this.setState({ ticketmaster: null });
               }}
               style={{
                 padding: "0px 4px",
