@@ -1538,7 +1538,8 @@ class App extends React.Component {
                             : x.classifications[0].segment.name === "Sports"
                             ? "sport"
                             : "recreation",
-                        center
+                        center,
+                        date: x.dates.start.dateTime
                       };
                     }),
                     ...this.state.event
@@ -2524,7 +2525,6 @@ class App extends React.Component {
           {this.state.event
             .filter((x) => x.subtype.includes(this.state.subtype))
             .map((x, i) => {
-              if (i !== 0) return null;
               return (
                 <div
                   key={i}
@@ -2593,9 +2593,12 @@ class App extends React.Component {
               {this.state.ticketmaster.name}
             </a>
             <div style={{ display: "flex", flexWrap: "wrap" }}>
-              {this.state.ticketmaster.images.map((x) => (
-                <img alt={this.state.ticketmaster.name} src={x.url} />
-              ))}
+              {this.state.ticketmaster.images.map((x, i) => {
+                if (i !== 0) return null;
+                return (
+                  <img key={i} alt={this.state.ticketmaster.name} src={x.url} />
+                );
+              })}
             </div>
           </div>
         )}
