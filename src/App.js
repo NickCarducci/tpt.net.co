@@ -299,7 +299,6 @@ class EntityEvent extends React.Component {
       eventDate: props.entityEvent.date
         ? new Date(props.entityEvent.date.seconds * 1000)
         : new Date(),
-      entityEvent: props.entityEvent,
       newAttendee: "",
       tickets: [],
       ticketsTaken: [],
@@ -310,9 +309,28 @@ class EntityEvent extends React.Component {
       newPrice: 0
     };
   }
+  componentDidUpdate = (prevProps) => {
+    if (this.props.entityEvent !== prevProps.entityEvent) {
+      this.getVenue();
+    }
+  };
+  getVenue = () => {
+    onSnapshot(
+      doc(firestore, "entity", this.props.entityEvent.venueId),
+      (doc) => {
+        console.log(doc.exists(), this.props.entityEvent.venueId);
+        this.setState({
+          venueOfEvent: doc.exists() && { ...doc.data(), id: doc.id }
+        });
+      },
+      (e) => console.log(e, "venueOfEvent")
+    );
+  };
+  componentDidMount = () => {
+    this.getVenue();
+  };
   render() {
-    const { entityEvent } = this.state;
-    const { auth } = this.props;
+    const { entityEvent, auth } = this.props;
     //console.log(this.state.eventDate);
     var rowseats = [],
       alphabet = [
@@ -343,8 +361,32 @@ class EntityEvent extends React.Component {
         "Y",
         "Z"
       ];
-    var seats = entityEvent.seats ? Number(entityEvent.seats) : 40;
-    var rows = entityEvent.rows ? Number(entityEvent.rows) : 40;
+    var seats =
+      this.state.section &&
+      this.state.venueOfEvent &&
+      this.state.venueOfEvent[this.state.section]
+        ? Number(this.state.venueOfEvent[this.state.section].split(":")[1])
+        : this.state.section &&
+          this.state.chosenVenue &&
+          this.state.chosenVenue[this.state.section]
+        ? Number(this.state.chosenVenue[this.state.section].split(":")[1])
+        : entityEvent.seats
+        ? Number(entityEvent.seats)
+        : 40;
+    var rows =
+      this.state.section &&
+      this.state.venueOfEvent &&
+      this.state.venueOfEvent[this.state.section]
+        ? Number(this.state.venueOfEvent[this.state.section].split(":")[0])
+        : this.state.section &&
+          this.state.chosenVenue &&
+          this.state.chosenVenue[this.state.section]
+        ? Number(this.state.chosenVenue[this.state.section].split(":")[0])
+        : entityEvent.rows
+        ? Number(entityEvent.rows)
+        : 40;
+    this.state.chosenVenue &&
+      console.log(this.state.chosenVenue[this.state.section], rows, seats);
     for (let y = 1; y < rows + 1; y++) {
       for (let x = 1; x < seats + 1; x++) {
         rowseats.push([y, x, [x, y]]);
@@ -356,6 +398,10 @@ class EntityEvent extends React.Component {
       z
     ]);
     //console.log(this.state.tickets);
+    const isAdmin =
+      this.props.auth !== undefined &&
+      (this.props.auth.uid === entityEvent.authorId ||
+        entityEvent.admin.includes(this.props.auth.uid));
     return (
       <div
         style={{
@@ -692,11 +738,174 @@ class EntityEvent extends React.Component {
               Go to {entityEvent.city}
             </div>
             <div>
+              <form
+                style={{ display: "flex" }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  isAdmin &&
+                    updateDoc(doc(firestore, "event", entityEvent.id), {
+                      venueId: this.state.chosenVenue
+                        ? this.state.chosenVenue.id
+                        : deleteField()
+                    }).catch((e) => console.log(e, "venueId"));
+                }}
+              >
+                {this.state.venue && (
+                  <select
+                    onChange={(e) => {
+                      const chosenVenue = this.state.venue.find(
+                        (x) => x.id === e.target.value
+                      );
+                      this.setState({ chosenVenue, section: null });
+                    }}
+                    value={this.state.chosenVenue && this.state.chosenVenue.id}
+                  >
+                    {[{ title: "venues" }, ...this.state.venue].map((x, i) => {
+                      return (
+                        <option key={i} value={x.id}>
+                          {x.title}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+                {this.state.chosenVenue && <button>Use</button>}
+              </form>
+              {this.state.venueOfEvent ? (
+                <div
+                  onClick={() => {
+                    if (!isAdmin) return null;
+                    var answer = window.confirm(
+                      "Remove venue " +
+                        this.state.venueOfEvent.title +
+                        " from event " +
+                        this.props.entityEvent.title +
+                        "?"
+                    );
+                    answer &&
+                      updateDoc(doc(firestore, "event", entityEvent.id), {
+                        venueId: deleteField()
+                      }).catch((e) => console.log(e, "venueId"));
+                  }}
+                >
+                  {this.state.venueOfEvent.title}
+                </div>
+              ) : (
+                <div
+                  onClick={() => {
+                    onSnapshot(
+                      query(
+                        collection(firestore, "entity"),
+                        where("collection", "==", "venue"),
+                        where("authorId", "==", this.props.auth.uid)
+                      ),
+                      (querySnapshot) => {
+                        this.setState(
+                          {
+                            venue: querySnapshot.docs
+                              .map((doc) => {
+                                return (
+                                  doc.exists() && { ...doc.data(), id: doc.id }
+                                );
+                              })
+                              .filter((x) => x)
+                          },
+                          () => {
+                            onSnapshot(
+                              query(
+                                collection(firestore, "entity"),
+                                where("collection", "==", "venue"),
+                                where(
+                                  "admin",
+                                  "array-contains",
+                                  this.props.auth.uid
+                                )
+                              ),
+                              (querySnapshot) => {
+                                this.setState({
+                                  venue: [
+                                    ...querySnapshot.docs
+                                      .map((doc) => {
+                                        return (
+                                          doc.exists() && {
+                                            ...doc.data(),
+                                            id: doc.id
+                                          }
+                                        );
+                                      })
+                                      .filter((x) => x),
+                                    ...this.state.venue
+                                  ]
+                                });
+                              }
+                            );
+                          }
+                        );
+                      }
+                    );
+                  }}
+                >
+                  Get Venues
+                </div>
+              )}
+            </div>
+            <div>
+              {/*this.props.auth !== undefined &&
+                (this.props.auth.uid === entityEvent.authorId ||
+                  entityEvent.admin.includes(this.props.auth.uid)) &&
+                this.state.chosenVenue &&
+                this.state.section && (
+                  <div
+                    onClick={() => {
+                      var answer = window.confirm(
+                        `Save section ` +
+                          this.state.section +
+                          ` to venue ` +
+                          this.state.chosenVenue.title
+                      );
+                      answer &&
+                        updateDoc(
+                          doc(firestore, "entity", this.state.chosenVenue.id)
+                        ,{
+                          [this.state.section]:this.state.rows
+                        });
+                    }}
+                  >
+                    Save section to venue
+                  </div>
+                )*/}
               {this.props.auth !== undefined &&
                 this.props.auth.uid === entityEvent.authorId && (
                   <div>
                     <form
                       onSubmit={(e) => {
+                        e.preventDefault();
+                        if (this.state.chosenVenue) {
+                          var answer1 = window.confirm(
+                            "Save " +
+                              this.state.chosenVenue.title +
+                              " section " +
+                              this.state.section +
+                              " as " +
+                              this.state.newRows +
+                              ":" +
+                              this.state.newSeats
+                          );
+                          return (
+                            answer1 &&
+                            updateDoc(
+                              doc(
+                                firestore,
+                                "entity",
+                                this.state.chosenVenue.id
+                              ),
+                              {
+                                [this.state.section]:
+                                  this.state.newRows + ":" + this.state.newSeats
+                              }
+                            )
+                          );
+                        }
                         var answer = window.confirm(
                           "Update all sections to default " +
                             this.state.newRows +
@@ -747,13 +956,28 @@ class EntityEvent extends React.Component {
                           });
                         }}
                       />
-                      <button>Save</button>
+                      <button type="submit">Save</button>
                     </form>
                     {this.state.newSection && (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
                           if (this.state.newSection !== "") {
+                            if (this.state.chosenVenue) {
+                              //return console.log(this.state.chosenVenue);
+                              return updateDoc(
+                                doc(
+                                  firestore,
+                                  "entity",
+                                  this.state.chosenVenue.id
+                                ),
+                                {
+                                  [this.state.newSection]: "40:40"
+                                }
+                              )
+                                .then(() => this.setState({ newSection: null }))
+                                .catch((e) => console.log(e, "section"));
+                            }
                             updateDoc(doc(firestore, "event", entityEvent.id), {
                               sections: arrayUnion(this.state.newSection)
                             })
@@ -779,17 +1003,52 @@ class EntityEvent extends React.Component {
                   </div>
                 )}
               <div style={{ display: "flex" }}>
-                <select
-                  value={this.state.section}
-                  onChange={(e) =>
-                    this.setState({ section: e.target.value, tickets: [] })
-                  }
-                >
-                  {entityEvent.sections &&
-                    ["section", ...entityEvent.sections].map((x, i) => (
+                {this.state.venueOfEvent ? (
+                  <select
+                    value={this.state.section}
+                    onChange={(e) =>
+                      this.setState({ section: e.target.value, tickets: [] })
+                    }
+                  >
+                    {[
+                      "section",
+                      ...Object.keys(this.state.venueOfEvent).filter((x) =>
+                        /[A-Z\d]/.test(x.charAt(0))
+                      )
+                    ].map((x, i) => (
                       <option key={i}>{x}</option>
                     ))}
-                </select>
+                  </select>
+                ) : this.state.chosenVenue ? (
+                  <select
+                    value={this.state.section}
+                    onChange={(e) =>
+                      this.setState({ section: e.target.value, tickets: [] })
+                    }
+                  >
+                    {[
+                      "section",
+                      ...Object.keys(this.state.chosenVenue).filter((x) =>
+                        /[A-Z\d]/.test(x.charAt(0))
+                      )
+                    ].map((x, i) => (
+                      <option key={i}>{x}</option>
+                    ))}
+                  </select>
+                ) : (
+                  entityEvent.sections && (
+                    <select
+                      value={this.state.section}
+                      onChange={(e) =>
+                        this.setState({ section: e.target.value, tickets: [] })
+                      }
+                    >
+                      {["section", ...entityEvent.sections].map((x, i) => (
+                        <option key={i}>{x}</option>
+                      ))}
+                    </select>
+                  )
+                )}
                 <span>
                   {rows}rows:{seats}seats
                 </span>
@@ -993,6 +1252,7 @@ class EntityEvent extends React.Component {
                   );
                 })}
               </svg>
+
               {this.props.auth !== undefined ? (
                 <form
                   onSubmit={async (e) => {
@@ -1114,6 +1374,9 @@ class EntityEvent extends React.Component {
               )}
             </div>
           </div>
+          {this.props.auth !== undefined &&
+            (this.props.auth.uid === entityEvent.authorId ||
+              entityEvent.admin.includes(this.props.auth.uid)) && <div />}
         </div>
       </div>
     );
@@ -1296,20 +1559,24 @@ class App extends React.Component {
           });
         }
         //[id,collection]
-        var entity = await this.hydrateEntity(params[1], params[0]).entity();
-        entityEvent = entity && JSON.parse(entity);
+
+        const event = ["event", "plan", "job", "housing"].includes(params[0]);
+        onSnapshot(
+          doc(
+            firestore,
+            params[0] === "oldEvent" ? params[0] : event ? "event" : "entity",
+            params[1]
+          ),
+          (doc) => {
+            this.setState({
+              entityEvent: doc.exists() && { ...doc.data(), id: doc.id }
+            });
+          }
+        );
       } else if (params.length === 1) {
         //username
         return null;
       }
-      console.log(entityEvent);
-      this.setState(
-        { entityEvent },
-        () => {
-          //this.props.unloadGreenBlue();
-        }
-        // this.props.getPostsAs(entityEvent)
-      );
     } else {
       newCityToQuery = specialFormatting(newCityToQuery).replace(/_/g, " ");
       //if (newCityToQuery !== this.props.city)
@@ -1337,6 +1604,8 @@ class App extends React.Component {
               //.get()
               .onSnapshot(
                 (value) => {
+                  if (value.docs.length === 0)
+                    return console.log("empty ", latlng);
                   const events = value.docs
                     .map((doc) => {
                       var foo = doc.exists && { ...doc.data(), id: doc.id };
@@ -2593,12 +2862,17 @@ class App extends React.Component {
               {this.state.ticketmaster.name}
             </a>
             <div style={{ display: "flex", flexWrap: "wrap" }}>
-              {this.state.ticketmaster.images.map((x, i) => {
-                if (i !== 0) return null;
-                return (
-                  <img key={i} alt={this.state.ticketmaster.name} src={x.url} />
-                );
-              })}
+              {this.state.ticketmaster.images &&
+                this.state.ticketmaster.images.map((x, i) => {
+                  if (i !== 0) return null;
+                  return (
+                    <img
+                      key={i}
+                      alt={this.state.ticketmaster.name}
+                      src={x.url}
+                    />
+                  );
+                })}
             </div>
           </div>
         )}

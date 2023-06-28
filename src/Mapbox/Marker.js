@@ -58,9 +58,9 @@ class Marker extends BaseControl {
     const sameaddress = this.props.mapThis.filter(
       (x) => x.place_name === event.place_name
     );
-    const to = !event.venue
+    const to = event.images
       ? "/events/ticketmaster/" + event.id
-      : !event.venue
+      : event.venue
       ? "/events/edmtrain/" + event.id
       : /*sameaddress
       ? "/events/" + event.place_name
