@@ -432,7 +432,7 @@ class EntityEvent extends React.Component {
           &times;
         </div>
 
-        {auth !== undefined && auth.uid === entityEvent.authorId && (
+        {isAdmin && (
           <div
             style={{
               padding: "0px 4px",
@@ -478,78 +478,77 @@ class EntityEvent extends React.Component {
           {entityEvent.body}
           <br />
           <div>
-            {this.props.auth !== undefined &&
-              entityEvent.authorId === this.props.auth.uid && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    var answer = window.confirm(
-                      "Want to add " +
-                        this.state.newTicketer.username +
-                        " to the event's ticket booth?"
-                    );
-                    answer &&
-                      updateDoc(doc(firestore, "event", entityEvent.id), {
-                        ticketers: arrayUnion(this.state.newTicketer.id)
-                      });
-                  }}
-                >
-                  {this.state.users.map((x, i) => {
-                    const selectedTicketer =
-                      this.state.newTicketer &&
-                      this.state.newTicketer.id === x.id;
-                    return (
-                      <div
-                        key={i}
-                        style={{
-                          backgroundColor: selectedTicketer ? "blue" : "",
-                          color: selectedTicketer ? "white" : ""
-                        }}
-                        onClick={(e) =>
-                          this.setState({
-                            newTicketer: x
-                          })
-                        }
-                      >
-                        {x.username}
-                      </div>
-                    );
-                  })}
-                  <input
-                    placeholder="username"
-                    onChange={(e) =>
-                      this.setState(
-                        {
-                          userQuery: e.target.value
-                        },
-                        () => {
-                          clearTimeout(this.searcher);
-                          this.searcher = setTimeout(() => {
-                            onSnapshot(
-                              query(
-                                collection(firestore, "users"),
-                                where(
-                                  "usernameAsArray",
-                                  "array-contains",
-                                  this.state.userQuery
-                                )
-                              ),
-                              (querySnapshot) => {
-                                this.setState({
-                                  users: querySnapshot.docs.map((doc) => {
-                                    return { ...doc.data(), id: doc.id };
-                                  })
-                                });
-                              }
-                            );
-                          }, 3000);
-                        }
-                      )
-                    }
-                  />
-                  <button type="submit">save</button>
-                </form>
-              )}
+            {isAdmin && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  var answer = window.confirm(
+                    "Want to add " +
+                      this.state.newTicketer.username +
+                      " to the event's ticket booth?"
+                  );
+                  answer &&
+                    updateDoc(doc(firestore, "event", entityEvent.id), {
+                      ticketers: arrayUnion(this.state.newTicketer.id)
+                    });
+                }}
+              >
+                {this.state.users.map((x, i) => {
+                  const selectedTicketer =
+                    this.state.newTicketer &&
+                    this.state.newTicketer.id === x.id;
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        backgroundColor: selectedTicketer ? "blue" : "",
+                        color: selectedTicketer ? "white" : ""
+                      }}
+                      onClick={(e) =>
+                        this.setState({
+                          newTicketer: x
+                        })
+                      }
+                    >
+                      {x.username}
+                    </div>
+                  );
+                })}
+                <input
+                  placeholder="username"
+                  onChange={(e) =>
+                    this.setState(
+                      {
+                        userQuery: e.target.value
+                      },
+                      () => {
+                        clearTimeout(this.searcher);
+                        this.searcher = setTimeout(() => {
+                          onSnapshot(
+                            query(
+                              collection(firestore, "users"),
+                              where(
+                                "usernameAsArray",
+                                "array-contains",
+                                this.state.userQuery
+                              )
+                            ),
+                            (querySnapshot) => {
+                              this.setState({
+                                users: querySnapshot.docs.map((doc) => {
+                                  return { ...doc.data(), id: doc.id };
+                                })
+                              });
+                            }
+                          );
+                        }, 3000);
+                      }
+                    )
+                  }
+                />
+                <button type="submit">save</button>
+              </form>
+            )}
             {this.props.auth === undefined ? null : entityEvent.ticketers &&
               entityEvent.ticketers.includes(this.props.auth.uid) ? (
               <div>
@@ -618,7 +617,7 @@ class EntityEvent extends React.Component {
             )}
             {entityEvent.place_name}
             <br />
-            {auth === undefined ? null : auth.uid === entityEvent.authorId ? (
+            {isAdmin ? (
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -773,6 +772,12 @@ class EntityEvent extends React.Component {
               </form>
               {this.state.venueOfEvent ? (
                 <div
+                  style={{
+                    border: "2px solid",
+                    borderRadius: "6px",
+                    padding: "4px 10px",
+                    width: "max-content"
+                  }}
                   onClick={() => {
                     if (!isAdmin) return null;
                     var answer = window.confirm(
@@ -1053,53 +1058,43 @@ class EntityEvent extends React.Component {
                   {rows}rows:{seats}seats
                 </span>
               </div>
-              {this.props.auth !== undefined &&
-              this.props.auth.uid === entityEvent.authorId ? (
+              {isAdmin ? (
                 <div
                   style={{
-                    display: "flex"
+                    textDecoration: this.state.section && "underline"
+                  }}
+                  onClick={() => {
+                    if (this.state.tickets.length > 0) {
+                      this.setState({ changePrices: true });
+                    } else if (this.state.section) {
+                      this.setState({
+                        tickets: rowseat
+                          .map(([x, y, z], i) => {
+                            const ticket = String([this.state.section, ...z]);
+                            if (
+                              entityEvent.ticketsTaken &&
+                              entityEvent.ticketsTaken.includes(ticket)
+                            )
+                              return null;
+                            if (
+                              entityEvent.ticketsReserved &&
+                              entityEvent.ticketsReserved.includes(ticket)
+                            )
+                              return null;
+                            if (this.state.tickets.includes(ticket)) {
+                              return null;
+                            } else return ticket;
+                          })
+                          .filter((x) => x)
+                      });
+                    }
                   }}
                 >
-                  <div>Reserve seating</div>
-                  <div
-                    style={{
-                      textDecoration: this.state.section && "underline"
-                    }}
-                    onClick={() => {
-                      if (this.state.tickets.length > 0) {
-                        this.setState({ changePrices: true });
-                      } else if (this.state.section) {
-                        this.setState({
-                          tickets: rowseat
-                            .map(([x, y, z], i) => {
-                              const ticket = String([this.state.section, ...z]);
-                              if (
-                                entityEvent.ticketsTaken &&
-                                entityEvent.ticketsTaken.includes(ticket)
-                              )
-                                return null;
-                              if (
-                                entityEvent.ticketsReserved &&
-                                entityEvent.ticketsReserved.includes(ticket)
-                              )
-                                return null;
-                              if (this.state.tickets.includes(ticket)) {
-                                return null;
-                              } else return ticket;
-                            })
-                            .filter((x) => x)
-                        });
-                      }
-                    }}
-                  >
-                    {this.state.tickets.length > 0
-                      ? "Edit prices"
-                      : this.state.section && "select all"}
-                  </div>
+                  {this.state.tickets.length > 0
+                    ? "Edit prices"
+                    : this.state.section && "select all"}
                 </div>
-              ) : (
-                "Purchase seating"
-              )}
+              ) : null}
               {this.state.changePrices && (
                 <form
                   onSubmit={(e) => {
@@ -1107,9 +1102,7 @@ class EntityEvent extends React.Component {
                     if (this.props.pathname.includes("/oldEvent/"))
                       return window.alert(
                         "this event is too old. no tickets " +
-                          (this.props.auth.uid === entityEvent.authorId
-                            ? "are "
-                            : "can be made ") +
+                          (isAdmin ? "are " : "can be made ") +
                           "available"
                       );
                     var answer = window.confirm(
@@ -1161,9 +1154,6 @@ class EntityEvent extends React.Component {
               >
                 {rowseat.map(([x, y, z], i) => {
                   const ticket = String([this.state.section, ...z]);
-                  const isAuthor =
-                    this.props.auth !== undefined &&
-                    this.props.auth.uid === entityEvent.authorId;
                   return (
                     !isNaN(x) &&
                     !isNaN(y) && (
@@ -1207,7 +1197,7 @@ class EntityEvent extends React.Component {
                             if (
                               entityEvent.ticketsReserved &&
                               entityEvent.ticketsReserved.includes(ticket) &&
-                              !isAuthor
+                              !isAdmin
                             )
                               return window.alert(
                                 "This seat (" + ticket + ") is reserved."
@@ -1260,12 +1250,10 @@ class EntityEvent extends React.Component {
                     if (this.props.pathname.includes("/oldEvent/"))
                       return window.alert(
                         "this event is too old. no tickets " +
-                          (this.props.auth.uid === entityEvent.authorId
-                            ? "are "
-                            : "can be made ") +
+                          (isAdmin ? "are " : "can be made ") +
                           "available"
                       );
-                    if (this.props.auth.uid === entityEvent.authorId) {
+                    if (isAdmin) {
                       if (this.state.tickets.length === 0) return null;
                       const toRemove =
                         entityEvent.ticketsReserved &&
@@ -1367,7 +1355,9 @@ class EntityEvent extends React.Component {
                       {x}
                     </span>
                   ))}
-                  <button type="submit">submit</button>
+                  <button type="submit">
+                    {isAdmin ? "reserve" : "submit"}
+                  </button>
                 </form>
               ) : (
                 <div>you must login to buy tickets (no refunds)</div>
