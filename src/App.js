@@ -1,4 +1,5 @@
 import React from "react";
+import { Helmet } from "react-helmet";
 import Geohash from "latlon-geohash";
 import { QrReader } from "react-qr-reader";
 import QRCode from "react-qr-code";
@@ -413,6 +414,9 @@ class EntityEvent extends React.Component {
           backgroundColor: "white"
         }}
       >
+        <Helmet>
+          <title>{`${entityEvent.title} in ${entityEvent.city}`}</title>
+        </Helmet>
         <div
           onClick={() => {
             this.props.navigate(`/${entityEvent.city}`);
