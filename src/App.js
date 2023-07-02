@@ -519,7 +519,7 @@ class EntityEvent extends React.Component {
                   );
                 })}
                 <input
-                  placeholder="username"
+                  placeholder="username ticketers"
                   onChange={(e) =>
                     this.setState(
                       {
@@ -550,7 +550,7 @@ class EntityEvent extends React.Component {
                     )
                   }
                 />
-                <button type="submit">save</button>
+                <button type="submit">admit</button>
               </form>
             )}
             {this.props.auth === undefined ? null : entityEvent.ticketers &&
@@ -1354,14 +1354,21 @@ class EntityEvent extends React.Component {
                     flexWrap: "wrap"
                   }}
                 >
-                  {this.state.tickets.map((x, i) => (
-                    <span style={{ margin: "0px 4px" }} key={i}>
-                      {x}
-                    </span>
-                  ))}
                   <button type="submit">
                     {isAdmin ? "reserve" : "submit"}
                   </button>
+                  {this.state.tickets.map((x, i) => (
+                    <span
+                      style={{
+                        margin: "2px 4px",
+                        fontSize: "12px",
+                        border: "1px dashed grey"
+                      }}
+                      key={i}
+                    >
+                      {x}
+                    </span>
+                  ))}
                 </form>
               ) : (
                 <div>you must login to buy tickets (no refunds)</div>
