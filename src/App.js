@@ -1224,7 +1224,7 @@ class EntityEvent extends React.Component {
                           stroke={"white"}
                           fill={
                             this.state.tickets.includes(ticket)
-                              ? isAuthor
+                              ? isAdmin
                                 ? "firebrick"
                                 : "blue"
                               : entityEvent.ticketsTaken &&
