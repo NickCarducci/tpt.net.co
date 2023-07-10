@@ -312,7 +312,7 @@ class EntityEvent extends React.Component {
   }
   componentDidUpdate = (prevProps) => {
     if (this.props.entityEvent !== prevProps.entityEvent) {
-      this.getVenue();
+      this.props.entityEvent.venueId && this.getVenue();
     }
   };
   getVenue = () => {
@@ -328,7 +328,7 @@ class EntityEvent extends React.Component {
     );
   };
   componentDidMount = () => {
-    this.getVenue();
+    this.props.entityEvent.venueId && this.getVenue();
   };
   render() {
     const { entityEvent, auth } = this.props;
