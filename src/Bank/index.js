@@ -7,14 +7,19 @@ import {
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import {
+  addDoc,
+  arrayUnion,
   collection,
   deleteField,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
   increment,
+  query,
   setDoc,
-  updateDoc
+  updateDoc,
+  where
 } from "firebase/firestore";
 import {
   EmailAuthProvider,
@@ -40,6 +45,7 @@ class Bank extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
+      payoutType: "setup",
       billing_details: {
         city: "",
         line1: "",
@@ -63,7 +69,11 @@ class Bank extends React.Component {
     this.phoneAuthProvider = new PhoneAuthProvider(getAuth());
   }
   componentDidUpdate = async (prevProps) => {
-    if (this.props.pathname !== prevProps.pathname) {
+    if (
+      this.props.pathname !== prevProps.pathname ||
+      this.state.stripe !== this.state.lastStripe
+    ) {
+      this.setState({ lastStripe: this.state.stripe });
       this.findURL();
     }
   };
@@ -137,7 +147,11 @@ class Bank extends React.Component {
     );
     if (clientSec) {
       console.log("clientSec", clientSec);
-      await fetch("https://vault-co.in/confirm", {
+      this.setState({
+        payoutType: "Bank"
+      });
+      this.setState({ clientSec });
+      await fetch("https://king-prawn-app-j2f2s.ondigitalocean.app/confirm", {
         method: "POST",
         headers: {
           "Access-Control-Request-Method": "POST",
@@ -154,8 +168,7 @@ class Bank extends React.Component {
           if (result.error) return console.log(result);
           if (!result.setupIntent)
             return console.log("dev error (Cash)", result);
-          console.log(result.setupIntent);
-          this.props.navigate("/");
+          console.log(result);
         })
         .catch(standardCatch);
     }
@@ -164,7 +177,7 @@ class Bank extends React.Component {
       this.state.stripe &&
       this.state.stripe
         .retrieveSetupIntent(clientSec)
-        .then(({ setupIntent }) => {
+        .then(async ({ setupIntent }) => {
           // Inspect the SetupIntent `status` to indicate the status of the payment
           // to your customer.
           //
@@ -176,7 +189,45 @@ class Bank extends React.Component {
             default:
               break;
             case "succeeded":
-              console.log("Success! Your payment method has been saved.");
+              console.log(
+                "Success! Your payment method has been saved.",
+                setupIntent
+              );
+
+              this.props.navigate("/");
+
+              this.setState({
+                payoutType: "setup"
+                //confirmBank: "bank"
+              });
+              await fetch(
+                "https://king-prawn-app-j2f2s.ondigitalocean.app/attach",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "Application/JSON",
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": ["Origin", "Content-Type"] //allow referer
+                  },
+                  body: JSON.stringify({
+                    payment_method: setupIntent.payment_method,
+                    customerId: this.props.user.customerId
+                  })
+                }
+              )
+                .then(async (res) => await res.json())
+                .then(async (result) => {
+                  if (result.status) return console.log(result);
+                  if (result.error) return console.log(result);
+                  if (!result.paymentMethod)
+                    return console.log("dev error (Cash)", result);
+
+                  updateDoc(doc(firestore, "userDatas", this.props.auth.uid), {
+                    paymentMethods: arrayUnion(setupIntent.payment_method)
+                  });
+                  window.location.reload();
+                })
+                .catch(standardCatch);
               break;
 
             case "processing":
@@ -308,6 +359,28 @@ class Bank extends React.Component {
   componentWillUnmount = () => {
     this.isMountCanceled = true;
   };
+  deleteThese = async (deleteThese = [], sinkThese = []) => {
+    await fetch("https://king-prawn-app-j2f2s.ondigitalocean.app/delete", {
+      method: "POST",
+      headers: {
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": ["Origin", "Content-Type"], //allow referer
+        "Content-Type": "Application/JSON"
+      },
+      body: JSON.stringify({
+        sinkThese,
+        deleteThese
+      })
+    }) //stripe account, not plaid access token payout yet
+      .then(async (res) => await res.json())
+      .then(async (result) => {
+        if (result.status) return console.log(result);
+        if (result.error) return console.log(result);
+        if (!result.data) return console.log("dev error (Cash)", result);
+        console.log(result.data);
+      })
+      .catch(standardCatch);
+  };
   render() {
     const paymentItems = this.state;
     const { user } = this.props;
@@ -320,9 +393,9 @@ class Bank extends React.Component {
       });
     };
     const trust = {
-      mcc: "7922",
-      account: "Theatre",
-      description: "Performing arts tickets."
+      mcc: "7399",
+      account: "Business",
+      description: "Payday loans."
     };
     const purchase = async (x, custom) => {
       console.log("purchase");
@@ -589,6 +662,7 @@ class Bank extends React.Component {
        * a stripe account exists
        */
       if (user.stripeId && !user.stripeLink) {
+        if (user.customerId) this.deleteThese([], [user.customerId]);
         /*if (user[`customer${shorter(trust.mcc)}Id`]) {
           if (!user[`cardholder${shorter(trust.mcc)}Id`])
           return console.log("dev error (no card)");
@@ -651,7 +725,8 @@ class Bank extends React.Component {
                 ),
                 { count: increment(1) }
               );
-              return { ...dx.data(), id: dx.id }.count + 1;
+              console.log(merchantSurnamePrefix + " set");
+              return dx.exists() ? { ...dx.data(), id: dx.id }.count + 1 : 1;
             })
             .catch((err) => {
               console.log("surname update,set, or get failure: ", err.message);
@@ -784,121 +859,124 @@ class Bank extends React.Component {
         } else return window.alert(`${email} is not an email format`);
       }
     };
-    return (
-      this.props.auth !== undefined && (
-        <div>
+    return this.props.auth === undefined ? (
+      "Vaults.biz industry assessment"
+    ) : (
+      <div>
+        <div
+          style={{
+            display: "inline-block"
+          }}
+        >
           <div
-            style={{
-              display: "inline-block"
-            }}
-          >
-            <div
-              onClick={async () => {
-                /*if (!this.state.account)
+            onClick={async () => {
+              /*if (!this.state.account)
           return this.setState({ openLinkToStripe: true },()=>{
             
           });*/
-                const { email } = this.props.auth;
-                console.log(this.props.auth);
-                if (
-                  !email ||
-                  !this.props.auth.emailVerified ||
-                  email !== this.state.openEmail
-                )
-                  return emailnew();
+              const { email } = this.props.auth;
+              console.log(this.props.auth);
+              if (
+                !email ||
+                !this.props.auth.emailVerified ||
+                email !== this.state.openEmail
+              )
+                return emailnew();
 
-                if (this.props.auth.emailAuth) return null; //emailCallback();
+              if (this.props.auth.emailAuth) return null; //emailCallback();
 
-                fetchSignInMethodsForEmail(getAuth(), email)
-                  .then((signInMethods) => {
-                    if (
-                      signInMethods.indexOf(
-                        EmailAuthProvider.EMAIL_LINK_SIGN_IN_METHOD
-                      ) > -1
-                    )
-                      return null; //emailCallback();
+              fetchSignInMethodsForEmail(getAuth(), email)
+                .then((signInMethods) => {
+                  if (
+                    signInMethods.indexOf(
+                      EmailAuthProvider.EMAIL_LINK_SIGN_IN_METHOD
+                    ) > -1
+                  )
+                    return null; //emailCallback();
 
-                    const canSignLinkEmail = isSignInWithEmailLink(
+                  const canSignLinkEmail = isSignInWithEmailLink(
+                    getAuth(),
+                    window.location.href
+                  ); //console.log("getAuth() a.k.a. auth ", getAuth());
+                  console.log(
+                    `can${canSignLinkEmail ? "" : "'t"} sign in with ` + email
+                  );
+                  if (canSignLinkEmail)
+                    return signInWithEmailLink(
                       getAuth(),
+                      email,
                       window.location.href
-                    ); //console.log("getAuth() a.k.a. auth ", getAuth());
-                    console.log(
-                      `can${canSignLinkEmail ? "" : "'t"} sign in with ` + email
-                    );
-                    if (canSignLinkEmail)
-                      return signInWithEmailLink(
-                        getAuth(),
-                        email,
-                        window.location.href
-                      )
-                        .then(() => {
-                          window.alert(email + " added!");
-                          this.props.navigate("/");
-                        })
-                        .catch((e) => {
-                          console.log(e.message);
-                          if (e.message === "INVALID_OOB_CODE") {
-                            window.alert(
-                              `The ${email}-confirmation link was already either used or is just expired.`
-                            );
-                            this.props.navigate("/login");
-                          }
-                        });
-                    const cb = (success) =>
-                      this.setState({
-                        humanCodeCredential: !success
-                      }); //reauth then //if (this.state.humanCodeCredential === 2)
-                    sendSignInLinkToEmail(getAuth(), this.props.auth.email, {
-                      handleCodeInApp: true,
-                      url: window.location.href
-                    })
+                    )
                       .then(() => {
-                        window.alert("visit your email");
-                        cb(true);
+                        window.alert(email + " added!");
+                        this.props.navigate("/");
                       })
-                      .catch(() => cb()); //this would invalidate phone auth?
-                    //https://firebase.google.com/docs/auth/flutter/email-link-auth
+                      .catch((e) => {
+                        console.log(e.message);
+                        if (e.message === "INVALID_OOB_CODE") {
+                          window.alert(
+                            `The ${email}-confirmation link was already either used or is just expired.`
+                          );
+                          this.props.navigate("/login");
+                        }
+                      });
+                  const cb = (success) =>
+                    this.setState({
+                      humanCodeCredential: !success
+                    }); //reauth then //if (this.state.humanCodeCredential === 2)
+                  sendSignInLinkToEmail(getAuth(), this.props.auth.email, {
+                    handleCodeInApp: true,
+                    url: window.location.href
                   })
-                  .catch(standardCatch);
-              }}
-              //src={""}
-              style={{
-                display: "flex",
-                position: "absolute",
-                right: "0px",
-                margin: "10px",
-                width: "36px",
-                top: "0px",
-                border: "1px solid" + (this.props.stripe ? " pink" : " black"),
-                height: "36px",
-                backgroundColor:
-                  !this.state.submitStripe && this.state.openFormSecure
-                    ? "rgb(255,217,102)" //"rgb(146,184,218)"
-                    : "rgb(25,35,25)",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: "1",
-                color:
-                  !this.state.submitStripe && this.state.openFormSecure
-                    ? "navy" //"rgb(207,226,243)" // "rgb(207,226,243)" //"rgb(146,184,218)"
-                    : "white"
-              }}
-              //alt="err"
-            >
-              +
-            </div>
-            <span
-              style={{
-                border: "1px solid",
-                padding: !this.props.hide && "0px 6px"
-              }}
-              onClick={async () => {
-                const answer = window.confirm(
-                  "Do you want to delete this email?"
-                );
+                    .then(() => {
+                      window.alert("visit your email");
+                      cb(true);
+                    })
+                    .catch(() => cb()); //this would invalidate phone auth?
+                  //https://firebase.google.com/docs/auth/flutter/email-link-auth
+                })
+                .catch(standardCatch);
+            }}
+            //src={""}
+            style={{
+              display: "flex",
+              position: "absolute",
+              right: "0px",
+              margin: "10px",
+              width: "36px",
+              top: "0px",
+              border: "1px solid" + (this.props.stripe ? " pink" : " black"),
+              height: "36px",
+              backgroundColor:
+                !this.state.submitStripe && this.state.openFormSecure
+                  ? "rgb(255,217,102)" //"rgb(146,184,218)"
+                  : "rgb(25,35,25)",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: "1",
+              color:
+                !this.state.submitStripe && this.state.openFormSecure
+                  ? "navy" //"rgb(207,226,243)" // "rgb(207,226,243)" //"rgb(146,184,218)"
+                  : "white"
+            }}
+            //alt="err"
+          >
+            +
+          </div>
+          <span
+            style={{
+              border: "1px solid",
+              padding: !this.props.hide && "0px 6px"
+            }}
+            onClick={async () => {
+              const answer = window.confirm(
+                "Do you want to delete this email?"
+              );
 
-                if (answer)
-                  await fetch(`https://vault-co.in/deleteemail`, {
+              if (answer)
+                await fetch(
+                  `https://king-prawn-app-j2f2s.ondigitalocean.app/deleteemail`,
+                  {
                     method: "POST",
                     //credentials: "include",
                     headers: {
@@ -912,329 +990,345 @@ class Bank extends React.Component {
                     body: JSON.stringify(this.props.auth), //getAuth().currentUser
                     maxAge: 3600
                     //"mode": "cors",
+                  }
+                )
+                  .then(async (response) => await response.json())
+                  .then((body) => {
+                    window.alert(body);
                   })
-                    .then(async (response) => await response.json())
-                    .then((body) => {
-                      window.alert(body);
-                    })
-                    .catch((err) => console.log(err));
+                  .catch((err) => console.log(err));
+            }}
+          >
+            &times;
+          </span>
+          &nbsp;
+          <span
+            style={{
+              fontFamily: "'Plaster', cursive",
+              fontWeight: "normal"
+            }}
+          >
+            <span
+              onClick={() => {
+                const answer = window.prompt("update decanter email");
+                if (answer && this.props.isEmail(answer)) {
+                  this.props.handleUpdateEmail(answer);
+                }
               }}
+              style={{ border: "1px dotted", fontWeight: "bolder" }}
             >
-              &times;
+              {this.props.auth.emailVerified
+                ? "recovery email"
+                : "verification required"}
             </span>
-            &nbsp;
+            {space}
             <span
               style={{
-                fontFamily: "'Plaster', cursive",
-                fontWeight: "normal"
+                transition: ".3s ease-in",
+                color: this.props.auth.emailVerified ? "white" : "",
+                backgroundColor: this.props.auth.emailVerified
+                  ? "cornflowerblue"
+                  : ""
+              }}
+              //onClick={() => window.alert("Vau.money personal trustee")}
+            >
+              {this.props.auth.email}
+            </span>
+          </span>
+        </div>
+        <br />
+        {this.props.user !== undefined &&
+          this.props.auth.email &&
+          this.props.auth.emailVerified &&
+          !this.props.user.stripeLink && (
+            <div
+              onClick={() => {
+                if (false && user.customerId) {
+                  updateDoc(doc(firestore, "userDatas", this.props.auth.uid), {
+                    customerId: deleteField()
+                  });
+                  return this.deleteThese([], [user.customerId]);
+                }
+                this.setState({ openFormSecure: !this.state.openFormSecure });
               }}
             >
-              <span
-                onClick={() => {
-                  const answer = window.prompt("update decanter email");
-                  if (answer && this.props.isEmail(answer)) {
-                    this.props.handleUpdateEmail(answer);
-                  }
-                }}
-                style={{ border: "1px dotted", fontWeight: "bolder" }}
-              >
-                {this.props.auth.emailVerified
-                  ? "recovery email"
-                  : "verification required"}
-              </span>
-              {space}
-              <span
-                style={{
-                  transition: ".3s ease-in",
-                  color: this.props.auth.emailVerified ? "white" : "",
-                  backgroundColor: this.props.auth.emailVerified
-                    ? "cornflowerblue"
-                    : ""
-                }}
-                //onClick={() => window.alert("Vau.money personal trustee")}
-              >
-                {this.props.auth.email}
-              </span>
-            </span>
-          </div>
-          {this.props.user !== undefined &&
-            this.props.auth.email &&
-            this.props.auth.emailVerified &&
-            !this.props.user.stripeLink && (
-              <div
-                onClick={() => {
-                  this.setState({ openFormSecure: !this.state.openFormSecure });
-                }}
-              >
-                {this.props.user.stripeId ? "Custom" : "Enroll"}
-              </div>
-            )}
-          {this.state.openFormSecure && (
-            <div>
-              <form
-                onSubmit={
-                  (e) => {
-                    e.preventDefault();
-                    /*fetch("https://geolocation-db.com/json/")
+              {
+                user.customerId
+                  ? "Edit"
+                  : this.props.user.stripeId
+                  ? "Add"
+                  : "Enroll"
+                //Custom
+              }
+            </div>
+          )}
+        {this.state.openFormSecure && (
+          <div>
+            <form
+              onSubmit={
+                (e) => {
+                  e.preventDefault();
+                  /*fetch("https://geolocation-db.com/json/")
             .then(async (res) => await res.json())
             .then((r) => {
               const IPv4 = r.IPv4;
               //console.log(IPv4);
               this.setState({ IPv4 }, () => {*/
-                    this.setState({ submitStripe: true });
-                  }
-                  //submitBank()
-                  //});}).catch((err) => console.log(err.message))
+                  this.setState({ submitStripe: true });
                 }
+                //submitBank()
+                //});}).catch((err) => console.log(err.message))
+              }
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                fontSize: this.state.openFormSecure ? "" : "0px"
+              }}
+            >
+              <button type="submit">submit</button>
+              <div
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  fontSize: this.state.openFormSecure ? "" : "0px"
+                  fontSize: "0px",
+                  overflow: "hidden",
+                  height: "0px",
+                  position: "relative"
                 }}
               >
-                <button type="submit">submit</button>
-                <div
-                  style={{
-                    fontSize: "0px",
-                    overflow: "hidden",
-                    height: "0px",
-                    position: "relative"
-                  }}
-                >
-                  <div style={{ position: "absolute" }}>
-                    {this.state.submitStripe && (
-                      <Elements stripe={stripePromise} options={null}>
-                        <ElementsConsumer>
-                          {(props) => {
-                            const { stripe, elements } = props;
-                            //console.log("striping");
-                            return (
-                              <STRIPE_ADDRESS
-                                saveaddress={(e) => {
-                                  console.log(e);
-                                  this.setState({
-                                    ...e,
-                                    last: this.state.last,
-                                    first: this.state.first
-                                  });
-                                }}
-                                noAccountYetArray={this.props.noAccountYetArray}
-                                stripe={stripe}
-                                auth={this.props.auth}
-                                user={user}
-                                first={this.state.first}
-                                last={this.state.last}
-                                options={{
-                                  mode: "shipping",
-                                  fields: {
-                                    //name: "never",
-                                    //firstName: "always",
-                                    //lastName: "always"
-                                  },
-                                  display: {
-                                    name: "split"
-                                  },
-                                  defaultValues: {
-                                    firstName: this.state.first,
-                                    lastName: this.state.last,
-                                    /*name: this.state.first +
+                <div style={{ position: "absolute" }}>
+                  {this.state.submitStripe && (
+                    <Elements stripe={stripePromise} options={null}>
+                      <ElementsConsumer>
+                        {(props) => {
+                          const { stripe, elements } = props;
+                          //console.log("striping");
+                          return (
+                            <STRIPE_ADDRESS
+                              saveaddress={(e) => {
+                                console.log(e);
+                                this.setState({
+                                  ...e,
+                                  last: this.state.last,
+                                  first: this.state.first
+                                });
+                              }}
+                              noAccountYetArray={this.props.noAccountYetArray}
+                              stripe={stripe}
+                              auth={this.props.auth}
+                              user={user}
+                              first={this.state.first}
+                              last={this.state.last}
+                              options={{
+                                mode: "shipping",
+                                fields: {
+                                  //name: "never",
+                                  //firstName: "always",
+                                  //lastName: "always"
+                                },
+                                display: {
+                                  name: "split"
+                                },
+                                defaultValues: {
+                                  firstName: this.state.first,
+                                  lastName: this.state.last,
+                                  /*name: this.state.first +
                           " " +
                           this.state.last,*/
-                                    address: {
-                                      line1: this.state.billing_details.line1,
-                                      line2: this.state.billing_details.line2,
-                                      city: this.state.billing_details.city,
-                                      state: this.state.billing_details.state,
-                                      postal_code: this.state.billing_details
-                                        .postal_code,
-                                      country: this.state.billing_details
-                                        .country
-                                    }
+                                  address: {
+                                    line1: this.state.billing_details.line1,
+                                    line2: this.state.billing_details.line2,
+                                    city: this.state.billing_details.city,
+                                    state: this.state.billing_details.state,
+                                    postal_code: this.state.billing_details
+                                      .postal_code,
+                                    country: this.state.billing_details.country
                                   }
-                                  //If you want to use Payment Element, it is required to pass in the clientSecret.
-                                  // passing the client secret obtained from the server
-                                  //clientSecret: "{{CLIENT_SECRET}}"
-                                  //https://stripe.com/docs/stripe-js/react
-                                  //https://stripe.com/docs/elements/address-element/collect-addresses?platform=web&client=react
-                                }}
-                              />
-                            );
-                          }}
-                        </ElementsConsumer>
-                      </Elements>
-                    )}
-                  </div>
-                </div>
-                <table>
-                  <thead></thead>
-                  <tbody>
-                    <tr
-                      style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
-                      }}
-                    >
-                      <td
-                        style={{
-                          width: "calc(50% - 4px)",
-                          paddingRight: "6px"
+                                }
+                                //If you want to use Payment Element, it is required to pass in the clientSecret.
+                                // passing the client secret obtained from the server
+                                //clientSecret: "{{CLIENT_SECRET}}"
+                                //https://stripe.com/docs/stripe-js/react
+                                //https://stripe.com/docs/elements/address-element/collect-addresses?platform=web&client=react
+                              }}
+                            />
+                          );
                         }}
-                        //<div style={{ width: "100%", display: "flex" }}>
-                      >
-                        <input
-                          style={inputStyle}
-                          required={true}
-                          value={this.state.first}
-                          onChange={(e) =>
-                            this.setState({
-                              first: specialFormatting(e.target.value)
-                            })
-                          }
-                          id="first"
-                          placeholder="first"
-                        />
-                      </td>
-                      <td style={{ width: "calc(50% - 4px)" }}>
-                        {space}
-                        <input
-                          style={inputStyle}
-                          required={true}
-                          value={this.state.last}
-                          onChange={(e) =>
-                            this.setState({
-                              last: specialFormatting(e.target.value)
-                            })
-                          }
-                          id="last"
-                          placeholder="last"
-                        />
-                      </td>
-                    </tr>
-                    <tr
+                      </ElementsConsumer>
+                    </Elements>
+                  )}
+                </div>
+              </div>
+              <table>
+                <thead></thead>
+                <tbody>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td
                       style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
+                        width: "calc(50% - 4px)",
+                        paddingRight: "6px"
                       }}
+                      //<div style={{ width: "100%", display: "flex" }}>
                     >
-                      <td style={{ width: "100%" }}>
-                        <input
-                          style={inputStyle}
-                          required={true}
-                          value={this.state.billing_details["line1"]}
-                          onChange={changePayoutInput}
-                          id="line1"
-                          placeholder="address"
-                        />
-                      </td>
-                    </tr>
-                    <tr
-                      style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
-                      }}
-                    >
-                      <td style={{ width: "100%" }}>
-                        <input
-                          style={inputStyle}
-                          value={this.state.billing_details["line2"]}
-                          onChange={changePayoutInput}
-                          id="line2"
-                          placeholder="p.o. box or unit number"
-                        />
-                      </td>
-                    </tr>
-                    <tr
-                      style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
-                      }}
-                    >
-                      <td style={{ width: "100%" }}>
-                        <input
-                          style={inputStyle}
-                          required={true}
-                          value={this.state.billing_details["city"]}
-                          onChange={changePayoutInput}
-                          id="city"
-                          placeholder="city"
-                        />
-                      </td>
-                    </tr>
-                    <tr
-                      style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
-                      }}
-                    >
-                      <td style={{ width: "100%" }}>
-                        <input
-                          style={inputStyle}
-                          //maxLength={2}
-                          //https://stripe.com/docs/tax/customer-locations#us-postal-codes
-                          required={true}
-                          value={this.state.billing_details["state"]}
-                          onChange={changePayoutInput}
-                          id="state"
-                          placeholder="state"
-                        />
-                      </td>
-                    </tr>
-                    <tr
-                      style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
-                      }}
-                    >
-                      <td style={{ width: "100%" }}>
-                        <input
-                          style={inputStyle}
-                          maxLength={5}
-                          required={true}
-                          value={this.state.billing_details["postal_code"]}
-                          onChange={changePayoutInput}
-                          id="postal_code"
-                          placeholder="ZIP"
-                        />
-                      </td>
-                    </tr>
-                    <tr
-                      style={{
-                        width: "calc(100% - 4px)",
-                        display: "flex"
-                      }}
-                    >
-                      <td style={{ width: "100%" }}>
-                        <input
-                          style={inputStyle}
-                          //maxLength={2}
-                          required={true}
-                          value={this.state.billing_details["country"]}
-                          onChange={changePayoutInput}
-                          id="country"
-                          placeholder="Country"
-                        />
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </form>
-            </div>
-          )}
-          {this.props.user !== undefined && this.state.address && (
-            <div onClick={() => makeAccount()}>Submit</div>
-          )}
-          {user && user.stripeLink && (
-            <a href={user && user.stripeLink}>Reset link</a>
-          )}
-          {user !== undefined && user.customerId && (
-            <div>
-              <h2
-                style={{
-                  display: "block"
-                }}
-              >
+                      <input
+                        style={inputStyle}
+                        required={true}
+                        value={this.state.first}
+                        onChange={(e) =>
+                          this.setState({
+                            first: specialFormatting(e.target.value)
+                          })
+                        }
+                        id="first"
+                        placeholder="first"
+                      />
+                    </td>
+                    <td style={{ width: "calc(50% - 4px)" }}>
+                      {space}
+                      <input
+                        style={inputStyle}
+                        required={true}
+                        value={this.state.last}
+                        onChange={(e) =>
+                          this.setState({
+                            last: specialFormatting(e.target.value)
+                          })
+                        }
+                        id="last"
+                        placeholder="last"
+                      />
+                    </td>
+                  </tr>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td style={{ width: "100%" }}>
+                      <input
+                        style={inputStyle}
+                        required={true}
+                        value={this.state.billing_details["line1"]}
+                        onChange={changePayoutInput}
+                        id="line1"
+                        placeholder="address"
+                      />
+                    </td>
+                  </tr>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td style={{ width: "100%" }}>
+                      <input
+                        style={inputStyle}
+                        value={this.state.billing_details["line2"]}
+                        onChange={changePayoutInput}
+                        id="line2"
+                        placeholder="p.o. box or unit number"
+                      />
+                    </td>
+                  </tr>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td style={{ width: "100%" }}>
+                      <input
+                        style={inputStyle}
+                        required={true}
+                        value={this.state.billing_details["city"]}
+                        onChange={changePayoutInput}
+                        id="city"
+                        placeholder="city"
+                      />
+                    </td>
+                  </tr>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td style={{ width: "100%" }}>
+                      <input
+                        style={inputStyle}
+                        //maxLength={2}
+                        //https://stripe.com/docs/tax/customer-locations#us-postal-codes
+                        required={true}
+                        value={this.state.billing_details["state"]}
+                        onChange={changePayoutInput}
+                        id="state"
+                        placeholder="state"
+                      />
+                    </td>
+                  </tr>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td style={{ width: "100%" }}>
+                      <input
+                        style={inputStyle}
+                        maxLength={5}
+                        required={true}
+                        value={this.state.billing_details["postal_code"]}
+                        onChange={changePayoutInput}
+                        id="postal_code"
+                        placeholder="ZIP"
+                      />
+                    </td>
+                  </tr>
+                  <tr
+                    style={{
+                      width: "calc(100% - 4px)",
+                      display: "flex"
+                    }}
+                  >
+                    <td style={{ width: "100%" }}>
+                      <input
+                        style={inputStyle}
+                        //maxLength={2}
+                        required={true}
+                        value={this.state.billing_details["country"]}
+                        onChange={changePayoutInput}
+                        id="country"
+                        placeholder="Country"
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </form>
+          </div>
+        )}
+        {this.props.user !== undefined && this.state.address && (
+          <div onClick={() => makeAccount()}>Apply</div>
+        )}
+        {user && user.stripeLink && (
+          <a href={user && user.stripeLink}>Reset link</a>
+        )}
+        {user !== undefined && user.customerId && (
+          <div>
+            <h2
+              style={{
+                display: "block"
+              }}
+            >
+              {false && (
                 <div
                   onClick={async () => {
+                    return null;
                     await fetch(
                       "https://king-prawn-app-j2f2s.ondigitalocean.app/list",
                       {
@@ -1258,6 +1352,7 @@ class Bank extends React.Component {
                         if (result.error) return console.log(result);
                         if (!result.list)
                           return console.log("dev error (Cash)", result);
+                        console.log(result);
                         this.setState({ list: result.list });
                       })
                       .catch(standardCatch);
@@ -1265,181 +1360,282 @@ class Bank extends React.Component {
                 >
                   List all
                 </div>
-                {this.state.list.map((x) => {
-                  return <div>{x.id}</div>;
-                })}
-                <select
-                  onChange={async (e) => {
-                    this.setState(
-                      {
-                        clientSecret: null,
-                        payoutType: e.target.value
-                      },
-                      async () => {
-                        if (e.target.value !== "setup") {
-                          const bankcard =
-                            e.target.value === "Bank"
-                              ? "us_bank_account"
-                              : "card";
-                          console.log(bankcard);
-                          await fetch(
-                            "https://king-prawn-app-j2f2s.ondigitalocean.app/add",
-                            {
-                              method: "POST",
-                              headers: {
-                                "Content-Type": "Application/JSON",
-                                "Access-Control-Request-Method": "POST",
-                                "Access-Control-Request-Headers": [
-                                  "Origin",
-                                  "Content-Type"
-                                ] //allow referer
-                              },
-                              body: JSON.stringify({
-                                bankcard
-                              })
-                            }
+              )}
+              {user.paymentMethods && (
+                <div>
+                  payment methods:{space}
+                  {user.paymentMethods.map((x) => {
+                    const obj = this.state["paymentMethod" + x];
+                    console.log("obj", obj);
+                    return (
+                      <div key={x}>
+                        {obj ? (
+                          obj.card ? (
+                            <div>
+                              {obj.card.brand}
+                              {space}(&bull;&bull;&bull;{obj.card.last4}):
+                              {obj.card.exp_month}/{obj.card.exp_year}
+                            </div>
+                          ) : (
+                            <div>
+                              {obj.us_bank_account.bank_name}
+                              {space}(&bull;&bull;&bull;
+                              {obj.us_bank_account.last4}
+                              ):{obj.us_bank_account.account_type}
+                            </div>
                           )
-                            .then(async (res) => await res.json())
-                            .then(async (result) => {
-                              if (result.status) return console.log(result);
-                              if (result.error) return console.log(result);
-                              if (!result.setupIntent)
-                                return console.log("dev error (Cash)", result);
-                              const clientSecret =
-                                result.setupIntent.client_secret;
-                              if (clientSecret) this.setState({ clientSecret });
+                        ) : (
+                          <div
+                            onClick={async () => {
+                              await fetch(
+                                "https://king-prawn-app-j2f2s.ondigitalocean.app/info",
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Access-Control-Request-Method": "POST",
+                                    "Access-Control-Request-Headers": [
+                                      "Origin",
+                                      "Content-Type"
+                                    ], //allow referer
+                                    "Content-Type": "Application/JSON"
+                                  },
+                                  body: JSON.stringify({ payment_method: x })
+                                }
+                              ) //stripe account, not plaid access token payout yet
+                                .then(async (res) => await res.json())
+                                .then(async (result) => {
+                                  if (result.status) return console.log(result);
+                                  if (result.error) return console.log(result);
+                                  if (!result.paymentMethod)
+                                    return console.log(
+                                      "dev error (Cash)",
+                                      result
+                                    );
+                                  console.log(result.paymentMethod);
+                                  this.setState({
+                                    ["paymentMethod" + x]: result.paymentMethod
+                                  });
+                                })
+                                .catch(standardCatch);
+                            }}
+                          >
+                            {x}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <select
+                value={this.state.payoutType}
+                onChange={async (e) => {
+                  this.setState(
+                    {
+                      clientSecret: null,
+                      payoutType: e.target.value
+                    },
+                    async () => {
+                      if (e.target.value !== "setup") {
+                        const bankcard =
+                          e.target.value === "Bank"
+                            ? "us_bank_account"
+                            : "card";
+                        console.log(bankcard);
+                        await fetch(
+                          "https://king-prawn-app-j2f2s.ondigitalocean.app/add",
+                          {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "Application/JSON",
+                              "Access-Control-Request-Method": "POST",
+                              "Access-Control-Request-Headers": [
+                                "Origin",
+                                "Content-Type"
+                              ] //allow referer
+                            },
+                            body: JSON.stringify({
+                              bankcard
                             })
-                            .catch(standardCatch);
+                          }
+                        )
+                          .then(async (res) => await res.json())
+                          .then(async (result) => {
+                            if (result.status) return console.log(result);
+                            if (result.error) return console.log(result);
+                            if (!result.setupIntent)
+                              return console.log("dev error (Cash)", result);
+                            const clientSecret =
+                              result.setupIntent.client_secret;
+                            if (clientSecret) this.setState({ clientSecret });
+                          })
+                          .catch(standardCatch);
+                      }
+                    }
+                  );
+                }}
+              >
+                {["setup", "Card", "Bank"].map((x) => {
+                  return <option key={x + "payout"}>{x}</option>;
+                })}
+              </select>
+            </h2>
+            {false && this.state.confirmBank && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+
+                  if (this.state.confirmBank === "bank")
+                    return this.state.stripe
+                      .confirmUsBankAccountSetup(this.state.clientSec, {
+                        payment_method: {
+                          us_bank_account: {
+                            routing_number: this.state.routing_number,
+                            account_number: this.state.account_number,
+                            account_holder_type: "individual"
+                          },
+                          billing_details: {
+                            name: user.first + " " + user.last,
+                            email: this.props.auth.email
+                          }
+                        }
+                      })
+                      .then(function (result) {
+                        if (result.error) {
+                          // Inform the customer that there was an error.
+                          console.log(result);
+                        } else {
+                          // Handle next step based on SetupIntent's status.
+                          console.log(
+                            "SetupIntent ID: " + result.setupIntent.id
+                          );
+                          console.log(
+                            "SetupIntent status: " + result.setupIntent.status
+                          );
+                        }
+                      });
+                  this.state.stripe
+                    .confirmCardSetup(this.state.clientSec, {
+                      payment_method: {
+                        card: this.state.elements,
+                        billing_details: {
+                          name: user.first + " " + user.last
                         }
                       }
+                    })
+                    .then(function (result) {
+                      // Handle result.error or result.setupIntent
+                    });
+                }}
+              >
+                {this.state.confirmBank === "bank" && (
+                  <div>
+                    <input
+                      required={true}
+                      placeholder="account"
+                      value={this.state.account_number}
+                      onChange={(e) => textu(e, "account_number")}
+                    />
+                    <input
+                      required={true}
+                      placeholder="routing"
+                      value={this.state.routing_number}
+                      onChange={(e) => textu(e, "routing_number")}
+                    />
+                  </div>
+                )}
+                <button type="submit">confirm account</button>
+              </form>
+            )}
+            {user && user[`microLink`] && (
+              <a href={user[`microLink`]}>Verify</a>
+            )}
+            {this.state.clientSecret && this.state.payoutType !== "setup" && (
+              <Elements
+                stripe={stripePromise}
+                options={{
+                  clientSecret: this.state.clientSecret
+                }}
+              >
+                <ElementsConsumer>
+                  {(props) => {
+                    const { stripe, elements } = props;
+                    this.state.stripe !== stripe &&
+                      this.setState({
+                        stripe,
+                        elements
+                      });
+                    return (
+                      stripe &&
+                      (() => {
+                        return (
+                          <form
+                            onSubmit={async (event) => {
+                              event.preventDefault();
+                              if (!stripe || !elements) return null;
+                              elements.submit();
+                              const { error } = await stripe.confirmSetup({
+                                clientSecret: this.state.clientSecret,
+                                //`Elements` instance that was used to create the Payment Element
+                                elements,
+                                confirmParams: {
+                                  return_url: `https://${window.location.hostname}`
+                                }
+                              });
+                              if (error) return console.log(error);
+                              return console.log("ok confirmed setup");
+                            }}
+                          >
+                            <PaymentElement />
+
+                            <div>
+                              {this.state.payoutType !== "Bank" ? (
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    width: "100%"
+                                  }}
+                                >
+                                  <input
+                                    placeholder="First"
+                                    value={user.first}
+                                    style={{ width: "33%" }}
+                                  />
+                                  <input
+                                    placeholder="Middle"
+                                    value={this.state.middle}
+                                    onChange={(e) => {
+                                      this.setState({
+                                        middle: e.target.value
+                                      });
+                                    }}
+                                    style={{ width: "33%" }}
+                                  />
+                                  <input
+                                    placeholder="Last"
+                                    value={user.last}
+                                    style={{ width: "33%" }}
+                                  />
+                                </div>
+                              ) : null}
+                            </div>
+                            <button disabled={!stripe}>Submit</button>
+                          </form>
+                        );
+                      })()
                     );
                   }}
-                >
-                  {["setup", "Card", "Bank"].map((x) => {
-                    return <option key={x + "payout"}>{x}</option>;
-                  })}
-                </select>
-              </h2>
-              {user && user[`microLink`] && (
-                <a href={user[`microLink`]}>Verify</a>
-              )}
-              {this.state.clientSecret && this.state.payoutType !== "setup" && (
-                <Elements
-                  stripe={stripePromise}
-                  options={{
-                    clientSecret: this.state.clientSecret
-                  }}
-                >
-                  <ElementsConsumer>
-                    {(props) => {
-                      const { stripe, elements } = props;
-                      this.state.stripe !== stripe &&
-                        this.setState({
-                          stripe,
-                          elements
-                        });
-                      return (
-                        this.state.payoutType !== "setup" &&
-                        stripe &&
-                        (() => {
-                          return (
-                            <form
-                              onSubmit={async (event) => {
-                                event.preventDefault();
-                                if (!stripe || !elements) return null;
-                                elements.submit();
-                                const { error } = await stripe.confirmSetup({
-                                  clientSecret: this.state.clientSecret,
-                                  //`Elements` instance that was used to create the Payment Element
-                                  elements,
-                                  confirmParams: {
-                                    return_url: `https://${window.location.hostname}`
-                                  }
-                                });
-                                if (error) return console.log(error);
-                                return console.log("ok confirmed setup");
-                              }}
-                            >
-                              <PaymentElement />
-
-                              <div>
-                                {this.state.payoutType !== "Bank" ? (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      width: "100%"
-                                    }}
-                                  >
-                                    <input
-                                      placeholder="First"
-                                      value={user.first}
-                                      style={{ width: "33%" }}
-                                    />
-                                    <input
-                                      placeholder="Middle"
-                                      value={this.state.middle}
-                                      onChange={(e) => {
-                                        this.setState({
-                                          middle: e.target.value
-                                        });
-                                      }}
-                                      style={{ width: "33%" }}
-                                    />
-                                    <input
-                                      placeholder="Last"
-                                      value={user.last}
-                                      style={{ width: "33%" }}
-                                    />
-                                  </div>
-                                ) : (
-                                  false && (
-                                    <div>
-                                      <input
-                                        required={true}
-                                        placeholder="company"
-                                        value={this.state.account_holder_type}
-                                        onChange={(e) =>
-                                          textu(e, "account_holder_type")
-                                        }
-                                      />
-                                      <input
-                                        required={true}
-                                        placeholder="account"
-                                        value={this.state.account_number}
-                                        onChange={(e) =>
-                                          textu(e, "account_number")
-                                        }
-                                      />
-                                      <input
-                                        required={true}
-                                        placeholder="routing"
-                                        value={this.state.routing_number}
-                                        onChange={(e) =>
-                                          textu(e, "routing_number")
-                                        }
-                                      />
-                                    </div>
-                                  )
-                                )}
-                              </div>
-                              <button disabled={!stripe}>Submit</button>
-                            </form>
-                          );
-                        })()
-                      );
-                    }}
-                  </ElementsConsumer>
-                </Elements>
-              )}
-            </div>
-          )}
-          {user && user[`microLink`] && (
-            <a style={{ color: "white" }} href={user[`microLink`]}>
-              Verify
-            </a>
-          )}
-        </div>
-      )
+                </ElementsConsumer>
+              </Elements>
+            )}
+          </div>
+        )}
+        {user && user[`microLink`] && (
+          <a style={{ color: "white" }} href={user[`microLink`]}>
+            Verify
+          </a>
+        )}
+      </div>
     );
   }
 }
