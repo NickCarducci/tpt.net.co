@@ -1339,7 +1339,7 @@ class EntityEvent extends React.Component {
                         .then(async (result) => {
                           if (result.status) return console.log(result);
                           if (result.error) return console.log(result);
-                          if (!result.setupIntent)
+                          if (!result.paymentIntent)
                             return console.log("dev error (Cash)", result);
                           takeTickets();
                           window.location.reload();
@@ -1601,6 +1601,10 @@ class App extends React.Component {
                 radius: this.state.distance
               });
             // Get query (as Promise)
+            this.setState({
+              city,
+              center
+            });
             query
               //.get()
               .onSnapshot(
@@ -1633,8 +1637,6 @@ class App extends React.Component {
                   console.log("success", events);
                   this.setState(
                     {
-                      city,
-                      center,
                       events
                     },
                     async () => {
