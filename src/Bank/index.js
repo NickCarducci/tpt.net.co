@@ -148,29 +148,33 @@ class Bank extends React.Component {
     if (clientSec) {
       console.log("clientSec", clientSec);
       this.setState({
-        payoutType: "Bank"
+        payoutType: "Bank",
+        clientSec
       });
-      this.setState({ clientSec });
-      await fetch("https://king-prawn-app-j2f2s.ondigitalocean.app/confirm", {
-        method: "POST",
-        headers: {
-          "Access-Control-Request-Method": "POST",
-          "Access-Control-Request-Headers": ["Origin", "Content-Type"], //allow referer
-          "Content-Type": "Application/JSON"
-        },
-        body: JSON.stringify({
-          seti: clientSec
-        })
-      }) //stripe account, not plaid access token payout yet
-        .then(async (res) => await res.json())
-        .then(async (result) => {
-          if (result.status) return console.log(result);
-          if (result.error) return console.log(result);
-          if (!result.setupIntent)
-            return console.log("dev error (Cash)", result);
-          console.log(result);
-        })
-        .catch(standardCatch);
+      false &&
+        (await fetch(
+          "https://king-prawn-app-j2f2s.ondigitalocean.app/confirm",
+          {
+            method: "POST",
+            headers: {
+              "Access-Control-Request-Method": "POST",
+              "Access-Control-Request-Headers": ["Origin", "Content-Type"], //allow referer
+              "Content-Type": "Application/JSON"
+            },
+            body: JSON.stringify({
+              seti: clientSec
+            })
+          }
+        ) //stripe account, not plaid access token payout yet
+          .then(async (res) => await res.json())
+          .then(async (result) => {
+            if (result.status) return console.log(result);
+            if (result.error) return console.log(result);
+            if (!result.setupIntent)
+              return console.log("dev error (Cash)", result);
+            console.log(result);
+          })
+          .catch(standardCatch));
     }
     // Retrieve the SetupIntent
     clientSec &&
@@ -178,6 +182,36 @@ class Bank extends React.Component {
       this.state.stripe
         .retrieveSetupIntent(clientSec)
         .then(async ({ setupIntent }) => {
+          if (setupIntent.status)
+            await fetch(
+              "https://king-prawn-app-j2f2s.ondigitalocean.app/attach",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "Application/JSON",
+                  "Access-Control-Request-Method": "POST",
+                  "Access-Control-Request-Headers": ["Origin", "Content-Type"] //allow referer
+                },
+                body: JSON.stringify({
+                  payment_method: setupIntent.payment_method,
+                  customerId: this.props.user.customerId
+                })
+              }
+            )
+              .then(async (res) => await res.json())
+              .then(async (result) => {
+                if (result.status) return console.log(result);
+                if (result.error) return console.log(result);
+                if (!result.paymentMethod)
+                  return console.log("dev error (Cash)", result);
+
+                updateDoc(doc(firestore, "userDatas", this.props.auth.uid), {
+                  paymentMethods: arrayUnion(setupIntent.payment_method)
+                });
+                this.props.navigate("/");
+                //window.location.reload();
+              })
+              .catch(standardCatch);
           // Inspect the SetupIntent `status` to indicate the status of the payment
           // to your customer.
           //
@@ -194,40 +228,12 @@ class Bank extends React.Component {
                 setupIntent
               );
 
-              this.props.navigate("/");
+              //
 
               this.setState({
                 payoutType: "setup"
                 //confirmBank: "bank"
               });
-              await fetch(
-                "https://king-prawn-app-j2f2s.ondigitalocean.app/attach",
-                {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "Application/JSON",
-                    "Access-Control-Request-Method": "POST",
-                    "Access-Control-Request-Headers": ["Origin", "Content-Type"] //allow referer
-                  },
-                  body: JSON.stringify({
-                    payment_method: setupIntent.payment_method,
-                    customerId: this.props.user.customerId
-                  })
-                }
-              )
-                .then(async (res) => await res.json())
-                .then(async (result) => {
-                  if (result.status) return console.log(result);
-                  if (result.error) return console.log(result);
-                  if (!result.paymentMethod)
-                    return console.log("dev error (Cash)", result);
-
-                  updateDoc(doc(firestore, "userDatas", this.props.auth.uid), {
-                    paymentMethods: arrayUnion(setupIntent.payment_method)
-                  });
-                  window.location.reload();
-                })
-                .catch(standardCatch);
               break;
 
             case "processing":
@@ -1325,10 +1331,10 @@ class Bank extends React.Component {
                 display: "block"
               }}
             >
-              {false && (
+              {true && (
                 <div
                   onClick={async () => {
-                    return null;
+                    //return null;
                     await fetch(
                       "https://king-prawn-app-j2f2s.ondigitalocean.app/list",
                       {
@@ -1361,23 +1367,43 @@ class Bank extends React.Component {
                   List all
                 </div>
               )}
-              {user.paymentMethods && (
+              {this.state.list && (
                 <div>
                   payment methods:{space}
-                  {user.paymentMethods.map((x) => {
+                  {this.state.list.map((y) => {
+                    const x = y.id;
                     const obj = this.state["paymentMethod" + x];
-                    console.log("obj", obj);
                     return (
                       <div key={x}>
                         {obj ? (
                           obj.card ? (
-                            <div>
+                            <div
+                              style={{
+                                border:
+                                  this.state.chosenMethod === x
+                                    ? "1px solid"
+                                    : "none"
+                              }}
+                              onClick={() => {
+                                this.setState({ chosenMethod: x });
+                              }}
+                            >
                               {obj.card.brand}
                               {space}(&bull;&bull;&bull;{obj.card.last4}):
                               {obj.card.exp_month}/{obj.card.exp_year}
                             </div>
                           ) : (
-                            <div>
+                            <div
+                              style={{
+                                border:
+                                  this.state.chosenMethod === x
+                                    ? "1px solid"
+                                    : "none"
+                              }}
+                              onClick={() => {
+                                this.setState({ chosenMethod: x });
+                              }}
+                            >
                               {obj.us_bank_account.bank_name}
                               {space}(&bull;&bull;&bull;
                               {obj.us_bank_account.last4}
