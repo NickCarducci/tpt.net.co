@@ -403,6 +403,7 @@ class EntityEvent extends React.Component {
       this.props.auth !== undefined &&
       (this.props.auth.uid === entityEvent.authorId ||
         entityEvent.admin.includes(this.props.auth.uid));
+    const space = " ";
     return (
       <div
         style={{
@@ -1316,6 +1317,10 @@ class EntityEvent extends React.Component {
                         return window.alert(
                           "This event maker hasn't setup a bank account yet."
                         );
+                      if (this.state.chosenMethod !== "")
+                        return window.alert(
+                          "You must select a payment method."
+                        );
                       await fetch(
                         "https://king-prawn-app-j2f2s.ondigitalocean.app/transfer",
                         {
@@ -1329,6 +1334,7 @@ class EntityEvent extends React.Component {
                             ] //allow referer
                           },
                           body: JSON.stringify({
+                            payment_method: this.state.chosenMethod,
                             customerId: this.props.user.customerId,
                             total: this.state.total,
                             stripeId: user.stripeId
@@ -1374,6 +1380,128 @@ class EntityEvent extends React.Component {
                 <div>you must login to buy tickets (no refunds)</div>
               )}
             </div>
+            {true && (
+              <div
+                onClick={async () => {
+                  //return null;
+                  await fetch(
+                    "https://king-prawn-app-j2f2s.ondigitalocean.app/list",
+                    {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "Application/JSON",
+                        "Access-Control-Request-Method": "POST",
+                        "Access-Control-Request-Headers": [
+                          "Origin",
+                          "Content-Type"
+                        ] //allow referer
+                      },
+                      body: JSON.stringify({
+                        customerId: this.props.user.customerId
+                      })
+                    }
+                  )
+                    .then(async (res) => await res.json())
+                    .then(async (result) => {
+                      if (result.status) return console.log(result);
+                      if (result.error) return console.log(result);
+                      if (!result.list)
+                        return console.log("dev error (Cash)", result);
+                      console.log(result);
+                      this.setState({ list: result.list });
+                    })
+                    .catch(standardCatch);
+                }}
+              >
+                List all
+              </div>
+            )}
+            {this.state.list && (
+              <div>
+                payment methods:{space}
+                {this.state.list.map((y) => {
+                  const x = y.id;
+                  const obj = this.state["paymentMethod" + x];
+                  return (
+                    <div key={x}>
+                      {obj ? (
+                        obj.card ? (
+                          <div
+                            style={{
+                              border:
+                                this.state.chosenMethod === x
+                                  ? "1px solid"
+                                  : "none"
+                            }}
+                            onClick={() => {
+                              this.setState({ chosenMethod: x });
+                            }}
+                          >
+                            {obj.card.brand}
+                            {space}(&bull;&bull;&bull;{obj.card.last4}):
+                            {obj.card.exp_month}/{obj.card.exp_year}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              border:
+                                this.state.chosenMethod === x
+                                  ? "1px solid"
+                                  : "none"
+                            }}
+                            onClick={() => {
+                              this.setState({ chosenMethod: x });
+                            }}
+                          >
+                            {obj.us_bank_account.bank_name}
+                            {space}(&bull;&bull;&bull;
+                            {obj.us_bank_account.last4}
+                            ):{obj.us_bank_account.account_type}
+                          </div>
+                        )
+                      ) : (
+                        <div
+                          onClick={async () => {
+                            await fetch(
+                              "https://king-prawn-app-j2f2s.ondigitalocean.app/info",
+                              {
+                                method: "POST",
+                                headers: {
+                                  "Access-Control-Request-Method": "POST",
+                                  "Access-Control-Request-Headers": [
+                                    "Origin",
+                                    "Content-Type"
+                                  ], //allow referer
+                                  "Content-Type": "Application/JSON"
+                                },
+                                body: JSON.stringify({ payment_method: x })
+                              }
+                            ) //stripe account, not plaid access token payout yet
+                              .then(async (res) => await res.json())
+                              .then(async (result) => {
+                                if (result.status) return console.log(result);
+                                if (result.error) return console.log(result);
+                                if (!result.paymentMethod)
+                                  return console.log(
+                                    "dev error (Cash)",
+                                    result
+                                  );
+                                console.log(result.paymentMethod);
+                                this.setState({
+                                  ["paymentMethod" + x]: result.paymentMethod
+                                });
+                              })
+                              .catch(standardCatch);
+                          }}
+                        >
+                          {x}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           {this.props.auth !== undefined &&
             (this.props.auth.uid === entityEvent.authorId ||
@@ -2904,3 +3032,4 @@ class App extends React.Component {
 }
 
 export default App;
+
