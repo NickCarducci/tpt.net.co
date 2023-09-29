@@ -197,13 +197,18 @@ class EventsAt extends React.Component {
       (querySnapshot) => {
         //if (querySnapshot.docs.length === 0) return window.alert("dev error");
         this.setState({
-          sameaddress: querySnapshot.docs
-            .map((doc) => {
-              if (doc.exists()) {
-                return { ...doc.data(), id: doc.id };
-              } else return null;
-            })
-            .filter((x) => x)
+          sameaddress: [
+            ...this.props.event.filter((x) => {
+              return this.props.eventsAt === x.venueId;
+            }),
+            ...querySnapshot.docs
+              .map((doc) => {
+                if (doc.exists()) {
+                  return { ...doc.data(), id: doc.id };
+                } else return null;
+              })
+              .filter((x) => x)
+          ]
         });
       }
     );
@@ -235,7 +240,15 @@ class EventsAt extends React.Component {
       >
         <div
           onClick={() => {
-            this.props.navigate(`/${cityFromPlaceName}`);
+            this.props.navigate(
+              `/${
+                sameaddress[0] && sameaddress[0]._embedded
+                  ? sameaddress[0]._embedded.venues[0].city.name +
+                    ", " +
+                    sameaddress[0]._embedded.venues[0].state.name
+                  : cityFromPlaceName
+              }`
+            );
             this.props.setApp({ eventsAt: null });
           }}
           style={{
@@ -251,6 +264,10 @@ class EventsAt extends React.Component {
         >
           &times;
         </div>
+        {sameaddress[0] &&
+          sameaddress[0]._embedded &&
+          sameaddress[0]._embedded.venues[0].name}
+        <hr />
         {sameaddress.map((x, i) => {
           //console.log(x);
           return (
@@ -259,7 +276,10 @@ class EventsAt extends React.Component {
               onClick={() => this.props.navigate(`/event/${x.id}`)}
               style={{ padding: "4px 10px", margin: "4px 0px" }}
             >
-              {x.title} - {new Date(x.date.seconds * 1000).toLocaleString()}
+              {x.title ? x.title : x.name} -{" "}
+              {new Date(
+                x.date ? x.date : x.date.seconds * 1000
+              ).toLocaleString()}
             </div>
           );
         })}
@@ -1930,6 +1950,7 @@ class App extends React.Component {
           //console.log(center);
           return {
             ...x,
+            venueId: x._embedded.venues[0].id,
             subtype:
               x.classifications[0].segment.name === "Music"
                 ? "concert"
@@ -2964,6 +2985,7 @@ class App extends React.Component {
         />
         {this.state.eventsAt && (
           <EventsAt
+            event={this.state.event}
             eventsAt={this.state.eventsAt}
             navigate={this.props.navigate}
             setApp={(e) => this.setState(e)}
@@ -3008,6 +3030,7 @@ class App extends React.Component {
                   if (i !== 0) return null;
                   return (
                     <img
+                      style={{ width: "200px" }}
                       key={i}
                       alt={this.state.ticketmaster.name}
                       src={x.url}
