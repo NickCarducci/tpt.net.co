@@ -368,10 +368,8 @@ class Mapbox extends React.Component {
         this.state.mapbox && this.resizee(false);
       });
     if (this.props.center !== prevProps.center) {
-      if (this.state.mapbox) {
-        console.log("location change " + this.props.center);
-        this.resizee(false, false, this.props.center);
-      }
+      console.log("location change " + this.props.center);
+      this.resizee(false, false, this.props.center);
     }
     if (
       this.props.entityEvent &&
@@ -385,9 +383,6 @@ class Mapbox extends React.Component {
             latitude: this.props.entityEvent.center[0]
           }
         });
-    }
-    if (this.props.center !== prevProps.center) {
-      this.props.center && this.setState({ readyForMap: true });
     }
   };
   updateSnowfall = () =>
@@ -698,7 +693,7 @@ class Mapbox extends React.Component {
       this.props.distance,
       this.props.center[1]
     );
-    //console.log("mapit", mapit);
+    //console.log("mapit", this.props.center);
     return (
       <div
         style={{
@@ -1060,7 +1055,7 @@ class Mapbox extends React.Component {
                 >
                   {mapit &&
                     mapit.map((obj, i) => {
-                      //i === 0 && console.log(obj);
+                      //console.log(obj);
                       var id = obj._id ? obj._id : obj.id;
                       if (
                         this.props.subtype !== "party & clubbing" &&
@@ -1068,11 +1063,6 @@ class Mapbox extends React.Component {
                       )
                         return null; //console.log(this.props.subtype, x.venue);
                       //console.log("this date" + new Date(x.date._seconds * 1000));
-                      if (
-                        !obj.venue &&
-                        !obj.subtype.includes(this.props.subtype)
-                      )
-                        return null;
                       if (obj.id.length < 10) {
                         let names = [];
                         obj.artistList.map((e) => {
@@ -1080,6 +1070,7 @@ class Mapbox extends React.Component {
                         });
                       }
                       if (obj.center || (obj.venue && obj.venue.longitude)) {
+                        //i === 0 && console.log(obj);
                         //if (!x.venue) console.log(x);
                         //console.log(this.props.tileChosen);
 
@@ -1180,12 +1171,12 @@ class Mapbox extends React.Component {
                             longitude={
                               obj.venue
                                 ? obj.venue.longitude
-                                : Number(obj.center[0])
+                                : Number(obj.center[1])
                             }
                             latitude={
                               obj.venue
                                 ? obj.venue.latitude
-                                : Number(obj.center[1])
+                                : Number(obj.center[0])
                             }
                             event={obj}
                             cityapi={this.props.city}
@@ -1194,7 +1185,7 @@ class Mapbox extends React.Component {
                             coordinates={
                               obj.venue
                                 ? [obj.venue.longitude, obj.venue.latitude]
-                                : obj.center
+                                : [obj.center[1], obj.center[0]]
                             }
                             anchor="bottom"
                           />
