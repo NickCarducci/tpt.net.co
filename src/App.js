@@ -1648,7 +1648,7 @@ class App extends React.Component {
       recordedEntityNames: [],
       recordedEntities: [],
       entity: [],
-      subtype: "party & clubbing"
+      subtype: "recreation" // "party & clubbing"
       //zoomChangedRecently:false
     };
     this.CreateEventThePage = React.createRef();
