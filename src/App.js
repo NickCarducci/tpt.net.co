@@ -1737,8 +1737,6 @@ class App extends React.Component {
               //.get()
               .onSnapshot(
                 (value) => {
-                  if (value.docs.length === 0)
-                    return console.log("empty ", latlng);
                   const events = value.docs
                     .map((doc) => {
                       var foo = doc.exists && { ...doc.data(), id: doc.id };
@@ -1762,12 +1760,13 @@ class App extends React.Component {
                       return foo;
                     })
                     .filter((x) => x);
-                  console.log("success", events);
+                  console.log("firestore", latlng, events);
                   this.setState(
                     {
                       events
                     },
                     async () => {
+                      return this.ticketmaster(latlng);
                       const cityapi = city.split(",")[0]; //.replace(/[, ]+/g, "_");
                       const stateapi = city.split(", ")[1];
                       //.replace(/ /g, "_");
@@ -1910,45 +1909,41 @@ class App extends React.Component {
         this.setState(
           {
             event //: this.state.events
-          },
-          async () => {
-            const consumerSecret = "iAkWSqAXXAFLtxiFJYQJeqYpWcZDVUbt";
-            const url = `https://app.ticketmaster.com/discovery/v2/events.json?geoPoint=${Geohash.encode(
-              ...latlng,
-              [9]
-            )}&size=150&apikey=${consumerSecret}`;
-            await fetch(url)
-              .then(async (response) => await response.json())
-              .then((body) => {
-                console.log(latlng, body._embedded.events);
-                this.setState({
-                  event: [
-                    ...body._embedded.events.map((x) => {
-                      const location = x._embedded.venues[0].location,
-                        center = [
-                          Number(location.longitude),
-                          Number(location.latitude)
-                        ];
-                      //console.log(center);
-                      return {
-                        ...x,
-                        subtype:
-                          x.classifications[0].segment.name === "Music"
-                            ? "concert"
-                            : x.classifications[0].segment.name === "Sports"
-                            ? "sport"
-                            : "recreation",
-                        center,
-                        date: x.dates.start.dateTime
-                      };
-                    }),
-                    ...this.state.event
-                  ]
-                });
-              })
-              .catch((err) => console.log(err.message));
           }
+          //this.ticketmaster(latlng)
         );
+      })
+      .catch((err) => console.log(err.message));
+  };
+  ticketmaster = async (latlng) => {
+    const consumerSecret = "iAkWSqAXXAFLtxiFJYQJeqYpWcZDVUbt";
+    const url = `https://app.ticketmaster.com/discovery/v2/events.json?geoPoint=${Geohash.encode(
+      ...latlng,
+      [9]
+    )}&size=150&apikey=${consumerSecret}`;
+    await fetch(url)
+      .then(async (response) => await response.json())
+      .then((body) => {
+        const event = body._embedded.events.map((x) => {
+          const location = x._embedded.venues[0].location,
+            center = [Number(location.latitude), Number(location.longitude)];
+          //console.log(center);
+          return {
+            ...x,
+            subtype:
+              x.classifications[0].segment.name === "Music"
+                ? "concert"
+                : x.classifications[0].segment.name === "Sports"
+                ? "sport"
+                : "recreation",
+            center,
+            date: x.dates.start.dateTime
+          };
+        });
+        console.log("ticketmaster", latlng, event);
+        this.setState({
+          event: [...event, ...this.state.event]
+        });
       })
       .catch((err) => console.log(err.message));
   };
@@ -2925,6 +2920,7 @@ class App extends React.Component {
           {this.state.event
             .filter((x) => x.subtype.includes(this.state.subtype))
             .map((x, i) => {
+              //!x.name && console.log(x);
               return (
                 <div
                   key={i}
@@ -2932,12 +2928,26 @@ class App extends React.Component {
                     this.props.navigate(`/event/${x.id}`);
                   }}
                 >
-                  <img
-                    style={{ width: "40px" }}
-                    src={x.chosenPhoto}
-                    alt={x.message}
-                  />
-                  {x.title}
+                  {x.chosenPhoto ? (
+                    <img
+                      style={{ width: "40px" }}
+                      src={x.chosenPhoto}
+                      alt={x.message}
+                    />
+                  ) : (
+                    !x.artistList && (
+                      <img
+                        style={{ width: "40px" }}
+                        src={x.images && x.images[0]}
+                        alt={"•"}
+                      />
+                    )
+                  )}
+                  {x.title
+                    ? x.title
+                    : x.name
+                    ? x.name
+                    : x.artistList.map((x) => x.name).join(", ")}
                 </div>
               );
             })}
