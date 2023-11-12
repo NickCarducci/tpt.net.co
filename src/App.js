@@ -273,7 +273,11 @@ class EventsAt extends React.Component {
           return (
             <div
               key={i}
-              onClick={() => this.props.navigate(`/event/${x.id}`)}
+              onClick={() =>
+                x._embedded
+                  ? (window.location.href = x.url)
+                  : this.props.navigate(`/event/${x.id}`)
+              }
               style={{ padding: "4px 10px", margin: "4px 0px" }}
             >
               {x.title ? x.title : x.name} -{" "}
@@ -427,7 +431,6 @@ class EntityEvent extends React.Component {
     return (
       <div
         style={{
-          zIndex: "1",
           display: "flex",
           position: "absolute",
           minWidth: "100%",
@@ -1786,7 +1789,7 @@ class App extends React.Component {
                       events
                     },
                     async () => {
-                      return this.ticketmaster(latlng);
+                      this.ticketmaster(latlng);
                       const cityapi = city.split(",")[0]; //.replace(/[, ]+/g, "_");
                       const stateapi = city.split(", ")[1];
                       //.replace(/ /g, "_");
@@ -1962,8 +1965,16 @@ class App extends React.Component {
           };
         });
         console.log("ticketmaster", latlng, event);
+        let plush = [];
         this.setState({
-          event: [...event, ...this.state.event]
+          event: [
+            ...event.filter((x) =>
+              !plush.includes(x._embedded.venues[0].id)
+                ? plush.push(x._embedded.venues[0].id)
+                : false
+            ),
+            ...this.state.event
+          ]
         });
       })
       .catch((err) => console.log(err.message));
@@ -2995,7 +3006,6 @@ class App extends React.Component {
         {this.state.ticketmaster && (
           <div
             style={{
-              zIndex: "1",
               display: "block",
               position: "absolute",
               width: "100%",
