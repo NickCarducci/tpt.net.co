@@ -399,9 +399,9 @@ class Bank extends React.Component {
       });
     };
     const trust = {
-      mcc: "7399",
-      account: "Business",
-      description: "Payday loans."
+      mcc: "7922",
+      account: "Events",
+      description: "Event ticketing."
     };
     const purchase = async (x, custom) => {
       console.log("purchase");
