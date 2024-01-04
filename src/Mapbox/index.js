@@ -485,14 +485,16 @@ class Mapbox extends React.Component {
         }
       }
     };
-    const location = await handleLocation(
+    const loc = await handleLocation(
       this.props.city,
       deviceLocation,
       lastCoords
     );
-    if (location) {
-      console.log(location);
-      if (location.constructor === Object && Object.keys(location)) {
+    if (loc) {
+      const location = JSON.parse(loc);
+      if (location.constructor === Object && Object.keys(location).length > 0) {
+        console.log(location.mapbox);
+        console.log("pin touched");
         if (location.code) return error(location);
         if (location.deviceLocation) {
           center = location.deviceLocation.center;
@@ -504,7 +506,7 @@ class Mapbox extends React.Component {
             deviceLocation: location.deviceLocation && location.deviceLocation
           },
           () => {
-            if (location.mapbox) {
+            if (location.deviceLocation.mapbox) {
               this.handleMapboxResults(location);
             } else if (center) {
               this.changeArea(center, place_name);
@@ -521,6 +523,7 @@ class Mapbox extends React.Component {
     } // else console.log("dev unlogged");
   };
   changeArea = (center, city) => {
+    console.log("change");
     setTimeout(() => {
       const state = city.split(", ")[1];
       const cityentry = city.split(",")[0];
@@ -1057,6 +1060,8 @@ class Mapbox extends React.Component {
                     mapit.map((obj, i) => {
                       //console.log(obj);
                       var id = obj._id ? obj._id : obj.id;
+                      if (!obj.venue && this.props.subtype !== obj.subtype)
+                        return null;
                       if (
                         this.props.subtype !== "party & clubbing" &&
                         obj.venue
