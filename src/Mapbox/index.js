@@ -433,11 +433,9 @@ class Mapbox extends React.Component {
   handleMapboxResults = (out) => {
     const city = out.mapbox[0];
     const center = out.mapbox[1];
-    //console.log("found " + city, center);
+    console.log("found " + city, center);
     if (city !== this.props.city) {
-      const cityapi = city.replace(/[, ]+/g, "_");
       const state = city.split(", ")[1];
-      const stateapi = state.replaceAll(/ /g, "_");
       this.setState(
         {
           deviceLocation: { city, center }
@@ -445,14 +443,14 @@ class Mapbox extends React.Component {
         () => {
           this.props.chooseCitypoint(
             center,
-            this.state.distance,
+            this.props.distance,
             city,
-            cityapi,
-            stateapi,
+            city.replace(/[, ]+/g, "_"),
+            state.replaceAll(/ /g, "_"),
             null
           );
           console.log("set " + city, center);
-          this.props.setCommunity({ city });
+          //this.props.setCommunity({ city });
         }
       );
     } else {
@@ -506,7 +504,7 @@ class Mapbox extends React.Component {
             deviceLocation: location.deviceLocation && location.deviceLocation
           },
           () => {
-            if (location.deviceLocation.mapbox) {
+            if (location.mapbox) {
               this.handleMapboxResults(location);
             } else if (center) {
               this.changeArea(center, place_name);
@@ -523,7 +521,7 @@ class Mapbox extends React.Component {
     } // else console.log("dev unlogged");
   };
   changeArea = (center, city) => {
-    console.log("change");
+    console.log("change", city);
     setTimeout(() => {
       const state = city.split(", ")[1];
       const cityentry = city.split(",")[0];
