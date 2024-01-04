@@ -2504,45 +2504,44 @@ class App extends React.Component {
   };
 
   chooseCitypoint = async (location, distance, city, cityapi, state) => {
-    if (!this.state.loading && !this.state.haltChooseCity) {
-      this.setState({ loading: true });
-      this.timeoutLoading = setTimeout(this.setState({ loading: false }), 5000);
-      console.log(city);
-      const center = [JSON.parse(location[0]), JSON.parse(location[1])];
-      this.setState({ center, city, cityapi, state });
-      if (this.state.using) {
-        return null;
+    console.log("changing");
+    // if (!this.state.loading && !this.state.haltChooseCity) {
+    this.setState({ loading: true });
+    this.timeoutLoading = setTimeout(this.setState({ loading: false }), 5000);
+    const center = [JSON.parse(location[0]), JSON.parse(location[1])];
+    console.log(city, center);
+    this.setState({ center, city, cityapi, state });
+    if (this.state.using) {
+      return null;
+    } else {
+      //this.chooseCitypoint(location, distance, city, cityapi, state);
+      this.setState({ using: true });
+      if (this.state.cityapisLoaded.includes(cityapi)) {
+        console.log(this.state[`${cityapi}`]);
+        return this.setState({
+          edmTrainevents: this.state[`${cityapi}`]
+        });
       } else {
-        //this.chooseCitypoint(location, distance, city, cityapi, state);
-        this.setState({ using: true });
-        if (this.state.cityapisLoaded.includes(cityapi)) {
-          console.log(this.state[`${cityapi}`]);
-          return this.setState({
-            edmTrainevents: this.state[`${cityapi}`]
-          });
-        } else {
-          //this.getEdmTrainpoint(cityapi, state);
-          this.setState({
-            ok: false,
-            cityapisLoaded: [...this.state.cityapisLoaded, cityapi]
-          });
-          this.fetchCities(location, distance, city);
-          var Lat = location[0];
-          var Length = distance * 1.60934;
-          var Ratio = 100;
-          var WidthPixel = window.innerWidth;
-          //console.log(WidthPixel + Ratio + Lat + Length);
-          this.calculateZoom(
-            WidthPixel,
-            Ratio,
-            Lat,
-            Length,
-            location,
-            distance,
-            city
-          );
-          console.log(location);
-        }
+        //this.getEdmTrainpoint(cityapi, state);
+        this.setState({
+          ok: false,
+          cityapisLoaded: [...this.state.cityapisLoaded, cityapi]
+        });
+        var Lat = location[0];
+        var Length = distance * 1.60934;
+        var Ratio = 100;
+        var WidthPixel = window.innerWidth;
+        //console.log(WidthPixel + Ratio + Lat + Length);
+        this.calculateZoom(
+          WidthPixel,
+          Ratio,
+          Lat,
+          Length,
+          location,
+          distance,
+          city
+        );
+        console.log(location);
       }
     }
   };
@@ -2589,30 +2588,6 @@ class App extends React.Component {
       this.setState({ scrollChosen: myZoom });
     }
     return myZoom;
-  };
-  fetchCities = async (location, distance, city) => {
-    await fetch(
-      "https://us-central1-thumbprint-1c31n.cloudfunctions.net/chooseCity",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "Application/JSON",
-          "Access-Control-Request-Method": "POST"
-        },
-        body: JSON.stringify({ location, distance }),
-        maxAge: 10
-        //"mode": "cors",
-      }
-    )
-      .then(async (response) => await response.json())
-      .then((body) => {
-        this.setState({ distance, city });
-        console.log("Success", body.sendit);
-        this.setState({ events: body.sendit });
-      })
-      .catch((err) => {
-        console.log(err);
-      });
   };
   tilesOpener = () => {
     this.setState({
@@ -2807,6 +2782,7 @@ class App extends React.Component {
           distance={this.state.distance}
           city={this.state.city}
           subtype={this.state.subtype}
+          chooseCitypoint={this.chooseCitypoint}
         />
         <Find
           navigate={this.props.navigate}
@@ -3075,4 +3051,3 @@ class App extends React.Component {
 }
 
 export default App;
-
